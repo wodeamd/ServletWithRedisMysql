@@ -1,0 +1,318 @@
+---
+kind: Template
+apiVersion: v1
+metadata:
+  name: register
+  annotations:
+    description: An example to demonstrate tomcat + redis + mysql
+    iconClass: icon-java
+    tags: quickstart,java
+objects:
+- kind: Service
+  apiVersion: v1
+  metadata:
+    name: "${REG}"
+    annotations:
+      description: Exposes and load balances frontend pods
+  spec:
+    ports:
+    - name: web
+      port: 8080
+      targetPort: 8080
+    selector:
+      name: "${REG}"
+- kind: Route
+  apiVersion: v1
+  metadata:
+    name: "${REG}"
+  spec:
+    host: "${APPLICATION_DOMAIN}"
+    to:
+      kind: Service
+      name: "${REG}"
+- kind: DeploymentConfig
+  apiVersion: v1
+  metadata:
+    name: "${REG}"
+    annotations:
+      description: Defines how to deploy the application server
+  spec:
+    strategy:
+      type: Rolling
+    triggers:
+    - type: ConfigChange
+    replicas: 1
+    selector:
+      name: "${REG}"
+    template:
+      metadata:
+        name: "${REG}"
+        labels:
+          name: "${REG}"
+      spec:
+        containers:
+        - name: register
+          image: reg
+          imagePullPolicy: IfNotPresent
+          ports:
+          - containerPort: 8080
+          env:
+          - name: redhost
+            value: "${REDIS}"
+          - name: dbhost
+            value: "${GALERA}"
+          - name: user
+            value: "${user}"
+          - name: password
+            value: "${password}"
+
+#  Redis
+- kind: Service
+  apiVersion: v1
+  metadata:
+    annotations:
+      service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+    name: ${REDIS}
+    labels:
+      app: redis
+  spec:
+    ports:
+    - port: 6379
+      name: peer
+    # *.redis.default.svc.cluster.local
+    clusterIP: None
+    selector:
+      app: redis
+
+- kind: PetSet
+  apiVersion: apps/v1alpha1
+  metadata:
+    name: rd
+  spec:
+    serviceName: "redis"
+    replicas: 3
+    template:
+      metadata:
+        labels:
+          app: redis
+        annotations:
+          pod.alpha.kubernetes.io/initialized: "true"  # If gcr.io/google_containers not accessable, can use wodeamd instead.
+          pod.alpha.kubernetes.io/init-containers: '[
+              {
+                  "name": "install",
+                  "image": "gcr.io/google_containers/redis-install:0.1",
+                  "imagePullPolicy": "Always",
+                  "args": ["--version=3.2.0", "--install-into=/opt", "--work-dir=/work-dir"],
+                  "volumeMounts": [
+                      {
+                          "name": "opt",
+                          "mountPath": "/opt"
+                      },
+                      {
+                          "name": "workdir",
+                          "mountPath": "/work-dir"
+                      }
+                  ]
+              },
+              {
+                  "name": "bootstrap",
+                  "image": "debian:jessie",
+                  "command": ["/work-dir/peer-finder"],
+                  "args": ["-on-start=\"/work-dir/on-start.sh\"", "-service=redis"],
+                  "env": [
+                    {
+                        "name": "POD_NAMESPACE",
+                        "valueFrom": {
+                            "fieldRef": {
+                                "apiVersion": "v1",
+                                "fieldPath": "metadata.namespace"
+                            }
+                        }
+                     }
+                  ],
+                  "volumeMounts": [
+                      {
+                          "name": "opt",
+                          "mountPath": "/opt"
+                      },
+                      {
+                          "name": "workdir",
+                          "mountPath": "/work-dir"
+                      }
+                  ]
+              }
+          ]'
+      spec:
+        containers:
+        - name: redis
+          image: debian:jessie
+          ports:
+          - containerPort: 6379
+            name: peer
+          command:
+          - /opt/redis/redis-server
+          args:
+          - /opt/redis/redis.conf
+          - --slave-read-only no   # Temporary soluition to simplify demo code.
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "/opt/redis/redis-cli -h $(hostname) ping"
+            initialDelaySeconds: 15
+            timeoutSeconds: 5
+          volumeMounts:
+          - name: datadir
+            mountPath: /data
+          - name: opt
+            mountPath: /opt
+        volumes:
+        - name: opt
+          emptyDir: {}
+        - name: workdir
+          emptyDir: {}
+        - name: datadir
+          emptyDir: {}    # Temporary solution, should use persistent volume
+
+# Mysql
+- kind: Service
+  apiVersion: v1
+  metadata:
+    annotations:
+      service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+    name: ${GALERA}
+    labels:
+      app: mysql
+  spec:
+    ports:
+    - port: 3306
+      name: mysql
+    # *.galear.default.svc.cluster.local
+    clusterIP: None
+    selector:
+      app: mysql
+
+- kind: PetSet
+  apiVersion: apps/v1alpha1
+  metadata:
+    name: mysql
+  spec:
+    serviceName: "galera"
+    replicas: 3
+    template:
+      metadata:
+        labels:
+          app: mysql
+        annotations:
+          pod.alpha.kubernetes.io/initialized: "true"
+          pod.alpha.kubernetes.io/init-containers: '[
+              {
+                  "name": "install",
+                  "image": "gcr.io/google_containers/galera-install:0.1",
+                  "imagePullPolicy": "IfNotPresent",
+                  "args": ["--work-dir=/work-dir"],
+                  "volumeMounts": [
+                      {
+                          "name": "workdir",
+                          "mountPath": "/work-dir"
+                      },
+                      {
+                          "name": "config",
+                          "mountPath": "/etc/mysql"
+                      }
+                  ]
+              },
+              {
+                  "name": "bootstrap",
+                  "image": "debian:jessie",
+                  "command": ["/work-dir/peer-finder"],
+                  "args": ["-on-start=\"/work-dir/on-start.sh\"", "-service=galera"],
+                  "env": [
+                    {
+                        "name": "POD_NAMESPACE",
+                        "valueFrom": {
+                            "fieldRef": {
+                                "apiVersion": "v1",
+                                "fieldPath": "metadata.namespace"
+                            }
+                        }
+                     }
+                  ],
+                  "volumeMounts": [
+                      {
+                          "name": "workdir",
+                          "mountPath": "/work-dir"
+                      },
+                      {
+                          "name": "config",
+                          "mountPath": "/etc/mysql"
+                      }
+                  ]
+              }
+          ]'
+      spec:
+        containers:
+        - name: mysql
+          image: erkules/galera:basic
+          ports:
+          - containerPort: 3306
+            name: mysql
+          - containerPort: 4444
+            name: sst
+          - containerPort: 4567
+            name: replication
+          - containerPort: 4568
+            name: ist
+          args:
+          - --defaults-file=/etc/mysql/my-galera.cnf
+          - --user=root
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - -c
+              - "mysql -u root -e 'show databases;'"
+            initialDelaySeconds: 15
+            timeoutSeconds: 5
+          volumeMounts:
+          - name: datadir
+            mountPath: /var/lib/
+          - name: config
+            mountPath: /etc/mysql
+        volumes:
+        - name: config
+          emptyDir: {}
+        - name: workdir
+          emptyDir: {}
+        - name: datadir
+          emptyDir: {}   # Temporary solution, should use persistent volume
+
+parameters:
+- name: REG
+  displayName: register
+  description: The name assigned to all of the register objects defined in this template.
+  value: register
+  required: true
+- name: APPLICATION_DOMAIN
+  displayName: Application Hostname
+  description: The exposed hostname that will route to ms-frontend service, if left
+    blank a value will be defaulted.
+  value: reg1.172.16.51.47.fxos
+- name: REDIS
+  displayName: redis
+  description: The redis service.
+  value: redis
+  required: true
+- name: GALERA
+  displayName: dbhost
+  description: Mysql service name.
+  value: galera
+  required: true
+- name: user
+  displayName: user
+  description: Mysql user name.
+  value: root
+  required: true
+labels:
+  template: reg

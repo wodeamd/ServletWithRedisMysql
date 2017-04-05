@@ -52,7 +52,7 @@ objects:
       spec:
         containers:
         - name: register
-          image: reg
+          image: register   # Change to wodeamd/register if not present locally
           imagePullPolicy: IfNotPresent
           ports:
           - containerPort: 8080

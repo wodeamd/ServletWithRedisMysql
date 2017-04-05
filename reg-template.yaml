@@ -41,7 +41,7 @@ objects:
       type: Rolling
     triggers:
     - type: ConfigChange
-    replicas: 1
+    replicas: 2
     selector:
       name: "${REG}"
     template:
@@ -63,8 +63,6 @@ objects:
             value: "${GALERA}"
           - name: user
             value: "${user}"
-          - name: password
-            value: "${password}"
 
 #  Redis
 - kind: Service
@@ -101,7 +99,7 @@ objects:
               {
                   "name": "install",
                   "image": "gcr.io/google_containers/redis-install:0.1",
-                  "imagePullPolicy": "Always",
+                  "imagePullPolicy": "IfNotPresent",
                   "args": ["--version=3.2.0", "--install-into=/opt", "--work-dir=/work-dir"],
                   "volumeMounts": [
                       {

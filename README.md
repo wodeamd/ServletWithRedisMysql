@@ -22,16 +22,18 @@ Go into the root of the application source:
 # Create a new ESDP project
 Redis and Mysql require root privilege, so here we also need to do scc setting. 
 
+Create project "register" from ESDP ui.
 ```
-# oc create project register
+
 # oc project register
 # oadm policy add-scc-to-group anyuid system:register:authenticated
 ```
 
 # Deploy application
+Process template form ESDP ui or use command as follow.
 
 ```
-# oc create -f reg-template.yaml
+# oc new-app -f reg-template.yaml
 ```
 
 > If you find accessing "gcr.io/google_containers" stuck. change the reference to "wodeamd"

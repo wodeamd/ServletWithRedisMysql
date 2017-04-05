@@ -52,7 +52,7 @@ objects:
       spec:
         containers:
         - name: register
-          image: register   # Change to wodeamd/register if not present locally
+          image: wodeamd/register   # Change to wodeamd/register if not present locally
           imagePullPolicy: IfNotPresent
           ports:
           - containerPort: 8080
@@ -98,7 +98,7 @@ objects:
           pod.alpha.kubernetes.io/init-containers: '[
               {
                   "name": "install",
-                  "image": "gcr.io/google_containers/redis-install:0.1",
+                  "image": "wodeamd/redis-install:0.1",
                   "imagePullPolicy": "IfNotPresent",
                   "args": ["--version=3.2.0", "--install-into=/opt", "--work-dir=/work-dir"],
                   "volumeMounts": [
@@ -207,7 +207,7 @@ objects:
           pod.alpha.kubernetes.io/init-containers: '[
               {
                   "name": "install",
-                  "image": "gcr.io/google_containers/galera-install:0.1",
+                  "image": "wodeamd/galera-install:0.1",
                   "imagePullPolicy": "IfNotPresent",
                   "args": ["--work-dir=/work-dir"],
                   "volumeMounts": [
